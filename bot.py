@@ -19,7 +19,6 @@ bot = telebot.TeleBot(TOKEN)
 
 DB_FILE = "telegram_tracker_db.json"
 
-# База из 100+ крутых, стильных и премиальных слов
 DEFAULT_COOL_WORDS = [
     "nexus", "zenith", "shadow", "blitz", "apex", "phantom", "titan", "storm", "crying", "lost",
     "cyber", "ghost", "king", "lord", "vibe", "chill", "god", "pro", "dark", "moon",
@@ -34,13 +33,11 @@ DEFAULT_COOL_WORDS = [
     "web", "link", "hub", "station", "base", "origin", "source", "target", "flash", "spark"
 ]
 
-# Мемные и хайповые слова
 MEME_WORDS = [
     "sigma", "gigachad", "rizz", "skibidi", "ohio", "mewing", "alpha", "beta", "pudge", "invoker",
     "shadowfiend", "ez", "clutch", "boost", "boosted", "taunt", "toxic", "cringe", "based", "chad"
 ]
 
-# Красивые цифровые паттерны
 NICE_NUM_PATTERNS = [
     "101", "1010", "1100", "111", "000", "777", "007", "666", "999", "13", "99", "2026", "024"
 ]
@@ -119,29 +116,18 @@ def save_checked_word(chat_id, word):
         return True
     return False
 
-# --- УМНЫЙ ИИ-АНАЛИЗАТОР НИКОВ ДЛЯ /itog ---
 def smart_evaluate_and_save(chat_id, username):
-    """
-    Интеллектуальная функция: оценивает ник по качеству, наличию крутых слов 
-    и красивых цифр. Если ник хороший — гарантированно добавляет в /itog.
-    """
     settings = get_user(chat_id)
     u = username.lower()
-    
     score = 0
     
-    # 1. Проверяем наличие слов из баз (стандартные, мемные, кастомные)
     all_words = DEFAULT_COOL_WORDS + MEME_WORDS + settings.get('custom_words', [])
-    has_word = any(w in u for w in all_words)
-    if has_word:
+    if any(w in u for w in all_words):
         score += 5
         
-    # 2. Проверяем наличие крутых цифровых комбинаций
-    has_nice_num = any(num in u for num in NICE_NUM_PATTERNS)
-    if has_nice_num:
+    if any(num in u for num in NICE_NUM_PATTERNS):
         score += 4
         
-    # 3. Оценка длины (короткие ценятся выше)
     if len(u) <= 6:
         score += 3
     elif len(u) <= 8:
@@ -149,12 +135,10 @@ def smart_evaluate_and_save(chat_id, username):
     else:
         score += 1
         
-    # 4. Если задан кастомный запрос через /search и он есть в нике — жирный плюс
     custom = settings.get('custom_query')
     if custom and custom in u:
         score += 6
 
-    # Умный порог: если итоговый балл >= 5, ник считается достаточно красивым для /itog
     if score >= 5:
         if u not in settings['itog_saved']:
             settings['itog_saved'].append(u)
@@ -295,7 +279,7 @@ def cmd_start(message):
     bot.send_message(
         chat_id,
         "🔥 **Telegram Rare Username Dashboard & Generator**\n\n"
-        "Умная ИИ-фильтрация активирована: в `/itog` попадают только топовые ники со словами и красивыми цифрами!",
+        "Умная ИИ-фильтрация активирована: в `/itog` попадают только топовые ники!",
         parse_mode="Markdown",
         reply_markup=get_markup(settings)
     )
@@ -309,7 +293,7 @@ def cmd_help(message):
         "⚙️ `/colvo Мин, Макс` — Задать диапазон длины (пример: `/colvo 5, 10`).\n"
         "🎯 `/search Шаблон` — Искать ники по конкретной основе.\n"
         "🔄 `/noseach` — Отключить текущий шаблон поиска.\n"
-        "🏆 `/itog` — Выдать от 1 до 7 лучших отобранных ИИ свободных ников.\n"
+        "🏆 `/itog` — Выдать от 1 до 7 лучших отобранных свободных ников.\n"
         "📁 `/allitog` — Получить `.txt` файл со ВСЕМИ крутыми никами.\n"
         "💬 `/slovo Слово` — Добавить слово в личную базу.\n"
         "📜 `/allslovo` — Просмотреть добавленные слова.\n"
@@ -419,7 +403,7 @@ def cmd_itog(message):
     response = "🏆 **ИИ-ОБЗОР: ЛУЧШИЕ ОТОБРАННЫЕ НИКИ (Итог):**\n\n"
     for nick in top_nicks:
         response += f"👉 `t.me/{nick}`\n"
-    response += "\n*(Проверено ИИ-фильтром на красивые словосочетания и цифры)*"
+    response += "\n*(Проверено фильтром на красивые словосочетания и цифры)*"
     
     bot.send_message(chat_id, response, parse_mode="Markdown")
 
@@ -439,7 +423,7 @@ def cmd_allitog(message):
     bot.send_document(
         chat_id, 
         file_bytes, 
-        caption="📁 Файл со ВСЕМИ отборными премиальными никами, одобренными ИИ!"
+        caption="📁 Файл со ВСЕМИ отборными премиальными никами!"
     )
 
 @bot.message_handler(commands=['info'])
@@ -451,7 +435,7 @@ def cmd_info(message):
         f"📊 **Статистика трейкера:**\n\n"
         f"⚙️ **Длина ников:** от `{st.get('colvo_min', 5)}` до `{st.get('colvo_max', 10)}`\n"
         f"📝 **В базе проверенных слов:** `{len(st['checked_words_base'])}`\n"
-        f"🤖 **Одобрено ИИ для `/itog`:** `{len(st['itog_saved'])}` ников\n"
+        f"🤖 **Одобрено для `/itog`:** `{len(st['itog_saved'])}` ников\n"
         f"🎉 **Последние находки:** `{found_str}`\n"
         f"🔍 **Всего проверено:** `{len(st['checked_history'])}`"
     )
@@ -478,7 +462,7 @@ def callback_query(call):
     elif call.data == "btn_itog":
         saved = settings['itog_saved']
         if not saved:
-            bot.answer_callback_query(call.id, "ИИ еще не отобрал топ ники!", show_alert=True)
+            bot.answer_callback_query(call.id, "Топ ники пока не найдены!", show_alert=True)
         else:
             count = min(len(saved), 7)
             top_str = "\n".join([f"t.me/{n}" for n in saved[-count:]])
@@ -490,7 +474,7 @@ def callback_query(call):
             return
         bot.answer_callback_query(call.id, "Запуск сканирования...")
         settings['is_searching'] = True
-        status_msg = bot.send_message(chat_id, "🔎 ИИ сканирует сеть Telegram и фильтрует лучшие варианты...")
+        status_msg = bot.send_message(chat_id, "🔎 Бот сканирует сеть Telegram и фильтрует лучшие варианты...")
         threading.Thread(target=run_search_loop, args=(chat_id, status_msg.message_id)).start()
         return
 
@@ -507,4 +491,25 @@ def callback_query(call):
         pass
 
 def run_search_loop(chat_id, msg_id):
-    settings = get_user(ch
+    settings = get_user(chat_id)
+    batch_size = 30 if settings['mode'] == 'full_power' else 12
+    found_username = None
+    checked_local = 0
+    
+    def worker():
+        nonlocal found_username
+        if not settings['is_searching'] or found_username:
+            return
+        candidate = generate_telegram_username(settings)
+        if not settings['is_searching'] or found_username:
+            return
+        if candidate not in settings['checked_history']:
+            settings['checked_history'].append(candidate)
+            
+        save_checked_word(chat_id, candidate)
+            
+        if check_telegram_username(candidate):
+            if candidate not in settings['found_nicks']:
+                settings['found_nicks'].append(candidate)
+            
+            is_top = smart_eval
