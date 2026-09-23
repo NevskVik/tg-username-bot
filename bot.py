@@ -19,7 +19,7 @@ bot = telebot.TeleBot(TOKEN)
 
 DB_FILE = "telegram_tracker_db.json"
 
-# Большая база из 100+ крутых, стильных и премиальных слов и корней для ников
+# База из 100+ крутых, стильных и премиальных слов
 DEFAULT_COOL_WORDS = [
     "nexus", "zenith", "shadow", "blitz", "apex", "phantom", "titan", "storm", "crying", "lost",
     "cyber", "ghost", "king", "lord", "vibe", "chill", "god", "pro", "dark", "moon",
@@ -34,7 +34,13 @@ DEFAULT_COOL_WORDS = [
     "web", "link", "hub", "station", "base", "origin", "source", "target", "flash", "spark"
 ]
 
-# Красивые комбинации цифр
+# Мемные и хайповые слова
+MEME_WORDS = [
+    "sigma", "gigachad", "rizz", "skibidi", "ohio", "mewing", "alpha", "beta", "pudge", "invoker",
+    "shadowfiend", "ez", "clutch", "boost", "boosted", "taunt", "toxic", "cringe", "based", "chad"
+]
+
+# Красивые цифровые паттерны
 NICE_NUM_PATTERNS = [
     "101", "1010", "1100", "111", "000", "777", "007", "666", "999", "13", "99", "2026", "024"
 ]
@@ -51,10 +57,22 @@ def load_db():
                         v['custom_words'] = []
                     if 'itog_saved' not in v:
                         v['itog_saved'] = []
+                    if 'checked_words_base' not in v:
+                        v['checked_words_base'] = []
                     if 'colvo_min' not in v:
                         v['colvo_min'] = 5
                     if 'colvo_max' not in v:
                         v['colvo_max'] = 10
+                    if 'use_words' not in v:
+                        v['use_words'] = 'yes'
+                    if 'numbers' not in v:
+                        v['numbers'] = 'yes'
+                    if 'stylish' not in v:
+                        v['stylish'] = 'yes'
+                    if 'nice_nums' not in v:
+                        v['nice_nums'] = 'yes'
+                    if 'memes' not in v:
+                        v['memes'] = 'yes'
                     formatted_data[chat_id] = v
                 return formatted_data
         except:
@@ -73,8 +91,6 @@ persistent_db = load_db()
 def get_user(chat_id):
     if chat_id not in persistent_db:
         persistent_db[chat_id] = {
-            'min_len': 5,
-            'max_len': 7,
             'colvo_min': 5,
             'colvo_max': 10,
             'use_words': 'yes',
@@ -87,11 +103,64 @@ def get_user(chat_id):
             'found_nicks': [],      
             'checked_history': [],  
             'itog_saved': [],       
+            'checked_words_base': [], 
             'custom_words': [],     
             'custom_query': None
         }
         save_db()
     return persistent_db[chat_id]
+
+def save_checked_word(chat_id, word):
+    settings = get_user(chat_id)
+    clean_word = word.strip().lower()
+    if clean_word and clean_word not in settings['checked_words_base']:
+        settings['checked_words_base'].append(clean_word)
+        save_db()
+        return True
+    return False
+
+# --- УМНЫЙ ИИ-АНАЛИЗАТОР НИКОВ ДЛЯ /itog ---
+def smart_evaluate_and_save(chat_id, username):
+    """
+    Интеллектуальная функция: оценивает ник по качеству, наличию крутых слов 
+    и красивых цифр. Если ник хороший — гарантированно добавляет в /itog.
+    """
+    settings = get_user(chat_id)
+    u = username.lower()
+    
+    score = 0
+    
+    # 1. Проверяем наличие слов из баз (стандартные, мемные, кастомные)
+    all_words = DEFAULT_COOL_WORDS + MEME_WORDS + settings.get('custom_words', [])
+    has_word = any(w in u for w in all_words)
+    if has_word:
+        score += 5
+        
+    # 2. Проверяем наличие крутых цифровых комбинаций
+    has_nice_num = any(num in u for num in NICE_NUM_PATTERNS)
+    if has_nice_num:
+        score += 4
+        
+    # 3. Оценка длины (короткие ценятся выше)
+    if len(u) <= 6:
+        score += 3
+    elif len(u) <= 8:
+        score += 2
+    else:
+        score += 1
+        
+    # 4. Если задан кастомный запрос через /search и он есть в нике — жирный плюс
+    custom = settings.get('custom_query')
+    if custom and custom in u:
+        score += 6
+
+    # Умный порог: если итоговый балл >= 5, ник считается достаточно красивым для /itog
+    if score >= 5:
+        if u not in settings['itog_saved']:
+            settings['itog_saved'].append(u)
+            save_db()
+            return True
+    return False
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -122,26 +191,35 @@ def generate_telegram_username(settings):
     custom = settings.get('custom_query')
     already_checked = set(settings['checked_history'])
     
-    all_words = DEFAULT_COOL_WORDS + settings['custom_words']
+    active_word_pool = []
+    if settings.get('use_words') == 'yes':
+        active_word_pool.extend(DEFAULT_COOL_WORDS)
+    if settings.get('memes') == 'yes':
+        active_word_pool.extend(MEME_WORDS)
+    active_word_pool.extend(settings.get('custom_words', []))
 
     for _ in range(150):
         nick = ""
         if custom and random.random() > 0.3:
             base = custom.strip().lower()
-            num_part = random.choice(NICE_NUM_PATTERNS) if random.random() > 0.4 else ""
+            num_part = random.choice(NICE_NUM_PATTERNS) if (settings.get('nice_nums') == 'yes' and random.random() > 0.4) else ""
             if random.random() > 0.5:
                 nick = base + num_part
             else:
                 nick = num_part + base
-        elif all_words and random.random() > 0.3:
-            word = random.choice(all_words)
-            num = random.choice(NICE_NUM_PATTERNS)
-            if random.random() > 0.5:
-                nick = num + word
+        elif active_word_pool and random.random() > 0.25:
+            word = random.choice(active_word_pool)
+            if settings.get('nice_nums') == 'yes' and random.random() > 0.2:
+                num = random.choice(NICE_NUM_PATTERNS)
+                nick = (num + word) if random.random() > 0.5 else (word + num)
             else:
-                nick = word + num
+                nick = word
+        elif settings.get('nice_nums') == 'yes' and random.random() > 0.5:
+            nick = random.choice(NICE_NUM_PATTERNS) + "".join(random.choice(string.ascii_lowercase) for _ in range(random.randint(1, 3)))
         else:
-            chars = string.ascii_lowercase + string.digits
+            chars = string.ascii_lowercase
+            if settings.get('numbers') == 'yes':
+                chars += string.digits
             nick = "".join(random.choice(chars) for _ in range(length))
 
         nick = nick.strip().lower()
@@ -170,11 +248,9 @@ def evaluate_username(username):
     else:
         num_score = 8
 
-    vowels = sum(1 for c in username if c in 'aeiou')
-    beauty_score = 7 if vowels > 0 else 4
-    
-    all_words = DEFAULT_COOL_WORDS + [w for chat in persistent_db.values() for w in chat.get('custom_words', [])]
-    if any(m in username for m in all_words):
+    beauty_score = 7
+    all_known_words = DEFAULT_COOL_WORDS + MEME_WORDS + [w for chat in persistent_db.values() for w in chat.get('custom_words', [])]
+    if any(m in username for m in all_known_words):
         beauty_score = 10
 
     return {
@@ -186,12 +262,30 @@ def evaluate_username(username):
 
 def get_markup(settings):
     markup = types.InlineKeyboardMarkup(row_width=2)
-    btn_len = types.InlineKeyboardButton(f"Длина (/colvo): {settings.get('colvo_min', 5)}-{settings.get('colvo_max', 10)}", callback_data="set_len")
-    mode_text = "⚡ Полная сила" if settings['mode'] == 'full_power' else "🏃‍♂️ Быстрый"
-    btn_mode = types.InlineKeyboardButton(f"Режим: {mode_text}", callback_data="toggle_mode")
-    btn_search = types.InlineKeyboardButton("🚀 Запустить поиск юзеров", callback_data="start_search")
-    btn_itog = types.InlineKeyboardButton("🏆 Топ ники (/itog)", callback_data="btn_itog")
-    markup.add(btn_len, btn_mode, btn_search, btn_itog)
+    
+    w_status = "✅ Вкл" if settings.get('use_words') == 'yes' else "❌ Выкл"
+    m_status = "✅ Вкл" if settings.get('memes') == 'yes' else "❌ Выкл"
+    n_status = "✅ Вкл" if settings.get('nice_nums') == 'yes' else "❌ Выкл"
+    num_status = "✅ Вкл" if settings.get('numbers') == 'yes' else "❌ Выкл"
+    
+    mode_text = "⚡ Турбо" if settings.get('mode') == 'full_power' else "🏃‍♂️ Стандарт"
+
+    markup.add(
+        types.InlineKeyboardButton(f"📚 Красивые слова: {w_status}", callback_data="toggle_words"),
+        types.InlineKeyboardButton(f"🤪 Мем-слова: {m_status}", callback_data="toggle_memes")
+    )
+    markup.add(
+        types.InlineKeyboardButton(f"🔢 Красивые цифры: {n_status}", callback_data="toggle_nicenums"),
+        types.InlineKeyboardButton(f"🔠 Обычные цифры: {num_status}", callback_data="toggle_numbers")
+    )
+    markup.add(
+        types.InlineKeyboardButton(f"⚙️ Длина (/colvo): {settings.get('colvo_min', 5)}-{settings.get('colvo_max', 10)}", callback_data="info_colvo"),
+        types.InlineKeyboardButton(f"⚡ Режим: {mode_text}", callback_data="toggle_mode")
+    )
+    markup.add(
+        types.InlineKeyboardButton("🚀 Запустить поиск", callback_data="start_search"),
+        types.InlineKeyboardButton("🏆 Топ ники (/itog)", callback_data="btn_itog")
+    )
     return markup
 
 @bot.message_handler(commands=['start'])
@@ -200,9 +294,8 @@ def cmd_start(message):
     settings = get_user(chat_id)
     bot.send_message(
         chat_id,
-        "🔥 **Telegram Rare Username Tracker & Generator**\n\n"
-        "Бот готов искать крутые ники с красивыми цифрами и словами!\n"
-        "Введите `/help`, чтобы посмотреть список всех доступных команд.",
+        "🔥 **Telegram Rare Username Dashboard & Generator**\n\n"
+        "Умная ИИ-фильтрация активирована: в `/itog` попадают только топовые ники со словами и красивыми цифрами!",
         parse_mode="Markdown",
         reply_markup=get_markup(settings)
     )
@@ -210,18 +303,18 @@ def cmd_start(message):
 @bot.message_handler(commands=['help'])
 def cmd_help(message):
     help_text = (
-        "📖 **Справка по командам бота:**\n\n"
-        "🚀 `/start` — Главное меню и запуск бота.\n"
-        "🛑 `/stop` — Остановить поиск юзернеймов.\n"
-        "⚙️ `/colvo Мин, Макс` — Задать диапазон длины (например: `/colvo 5, 10`).\n"
-        "🎯 `/search Слово` — Искать ники по конкретному шаблону/слову.\n"
+        "📖 **Справка по всем командам бота:**\n\n"
+        "🚀 `/start` — Открыть интерактивную GUI-панель.\n"
+        "🛑 `/stop` — Остановить активный поиск.\n"
+        "⚙️ `/colvo Мин, Макс` — Задать диапазон длины (пример: `/colvo 5, 10`).\n"
+        "🎯 `/search Шаблон` — Искать ники по конкретной основе.\n"
         "🔄 `/noseach` — Отключить текущий шаблон поиска.\n"
-        "🏆 `/itog` — Выдать от 1 до 7 самых красивых свободных юзернеймов.\n"
-        "📁 `/allitog` — Получить файл со ВСЕМИ крутыми никами, которые нашел бот.\n"
-        "💬 `/slovo Слово` — Добавить свое слово в базу красивых слов.\n"
-        "📜 `/allslovo` — Посмотреть все добавленные вами слова.\n"
-        "❌ `/dellslovo Слово` — Удалить слово из вашего списка.\n"
-        "📊 `/info` — Статистика и выгрузка базы проверенных ников."
+        "🏆 `/itog` — Выдать от 1 до 7 лучших отобранных ИИ свободных ников.\n"
+        "📁 `/allitog` — Получить `.txt` файл со ВСЕМИ крутыми никами.\n"
+        "💬 `/slovo Слово` — Добавить слово в личную базу.\n"
+        "📜 `/allslovo` — Просмотреть добавленные слова.\n"
+        "❌ `/dellslovo Слово` — Удалить слово из базы.\n"
+        "📊 `/info` — Статистика и показатели хранилища."
     )
     bot.send_message(message.chat.id, help_text, parse_mode="Markdown")
 
@@ -231,7 +324,7 @@ def cmd_stop(message):
     settings = get_user(chat_id)
     settings['is_searching'] = False
     save_db()
-    bot.send_message(chat_id, "🛑 Поиск юзернеймов остановлен!")
+    bot.send_message(chat_id, "🛑 Поиск юзернеймов успешно остановлен!")
 
 @bot.message_handler(commands=['colvo'])
 def cmd_colvo(message):
@@ -246,7 +339,7 @@ def cmd_colvo(message):
                 settings['colvo_min'] = min_l
                 settings['colvo_max'] = max_l
                 save_db()
-                bot.send_message(chat_id, f"✅ Успешно! Установлен диапазон длин от `{min_l}` до `{max_l}` символов.", parse_mode="Markdown")
+                bot.send_message(chat_id, f"✅ Успешно! Установлена длина: от `{min_l}` до `{max_l}` символов.", parse_mode="Markdown", reply_markup=get_markup(settings))
                 return
         bot.send_message(chat_id, "⚠️ Ошибка формата! Используйте так: `/colvo 5, 10`", parse_mode="Markdown")
     except:
@@ -283,7 +376,7 @@ def cmd_slovo(message):
     if word not in settings['custom_words']:
         settings['custom_words'].append(word)
         save_db()
-        bot.send_message(chat_id, f"✨ Слово `{word}` успешно добавлено в вашу базу красивых слов!", parse_mode="Markdown")
+        bot.send_message(chat_id, f"✨ Слово `{word}` успешно добавлено в вашу базу!", parse_mode="Markdown")
     else:
         bot.send_message(chat_id, f"ℹ️ Слово `{word}` уже есть в вашей базе.", parse_mode="Markdown")
 
@@ -296,7 +389,7 @@ def cmd_allslovo(message):
         words_str = ", ".join([f"`{w}`" for w in words])
         bot.send_message(chat_id, f"💬 **Ваши добавленные слова:**\n{words_str}", parse_mode="Markdown")
     else:
-        bot.send_message(chat_id, "ℹ️ Вы еще не добавили ни одного слова. Используйте команду `/slovo ВашеСлово`.")
+        bot.send_message(chat_id, "ℹ️ Вы еще не добавили ни одного слова через `/slovo`.")
 
 @bot.message_handler(commands=['dellslovo'])
 def cmd_dellslovo(message):
@@ -317,16 +410,16 @@ def cmd_itog(message):
     saved = settings['itog_saved']
     
     if not saved:
-        bot.send_message(chat_id, "ℹ️ У бота пока нет накопленных топ-ников. Запустите поиск, чтобы наполнить коллекцию!")
+        bot.send_message(chat_id, "ℹ️ ИИ еще не отобрал достаточно премиальных ников. Запустите поиск, чтобы ИИ наполнил коллекцию лучшими вариантами!")
         return
         
     count = min(len(saved), 7)
     top_nicks = saved[-count:]
     
-    response = "🏆 **САМЫЕ КРАСИВЫЕ И ТОПОВЫЕ НИКИ (Итог):**\n\n"
+    response = "🏆 **ИИ-ОБЗОР: ЛУЧШИЕ ОТОБРАННЫЕ НИКИ (Итог):**\n\n"
     for nick in top_nicks:
         response += f"👉 `t.me/{nick}`\n"
-    response += "\n*(Самые лучшие комбинации слов и цифр)*"
+    response += "\n*(Проверено ИИ-фильтром на красивые словосочетания и цифры)*"
     
     bot.send_message(chat_id, response, parse_mode="Markdown")
 
@@ -337,29 +430,30 @@ def cmd_allitog(message):
     saved = settings['itog_saved']
     
     if not saved:
-        bot.send_message(chat_id, "ℹ️ База крутых ников пока пуста.")
+        bot.send_message(chat_id, "ℹ️ База отборных ников пока пуста.")
         return
         
     file_content = "\n".join(saved)
     file_bytes = io.BytesIO(file_content.encode('utf-8'))
-    file_bytes.name = "telegram_all_top_usernames.txt"
+    file_bytes.name = "telegram_ai_top_usernames.txt"
     bot.send_document(
         chat_id, 
         file_bytes, 
-        caption="📁 Полный файл со ВСЕМИ крутыми и красивыми никами!"
+        caption="📁 Файл со ВСЕМИ отборными премиальными никами, одобренными ИИ!"
     )
 
 @bot.message_handler(commands=['info'])
 def cmd_info(message):
     chat_id = message.chat.id
     st = get_user(chat_id)
-    found_str = ", ".join(st['found_nicks'][-5:]) if st['found_nicks'] else "Пока не найдены"
+    found_str = ", ".join(st['found_nicks'][-5:]) if st['found_nicks'] else "Пока нет"
     info_text = (
-        f"📊 **Ваше хранилище трейкера:**\n\n"
-        f"⚙️ **Диапазон длины:** от `{st.get('colvo_min', 5)}` до `{st.get('colvo_max', 10)}` симв.\n"
-        f"🎉 **Последние найденные:** `{found_str}`\n"
-        f"🏆 **Сохранено в итоги (`/itog`):** `{len(st['itog_saved'])}` ников\n"
-        f"🔍 **Всего проверено за всё время:** `{len(st['checked_history'])}`"
+        f"📊 **Статистика трейкера:**\n\n"
+        f"⚙️ **Длина ников:** от `{st.get('colvo_min', 5)}` до `{st.get('colvo_max', 10)}`\n"
+        f"📝 **В базе проверенных слов:** `{len(st['checked_words_base'])}`\n"
+        f"🤖 **Одобрено ИИ для `/itog`:** `{len(st['itog_saved'])}` ников\n"
+        f"🎉 **Последние находки:** `{found_str}`\n"
+        f"🔍 **Всего проверено:** `{len(st['checked_history'])}`"
     )
     bot.send_message(chat_id, info_text, parse_mode="Markdown")
 
@@ -368,12 +462,23 @@ def callback_query(call):
     chat_id = call.message.chat.id
     settings = get_user(chat_id)
     
-    if call.data == "toggle_mode":
-        settings['mode'] = 'fast' if settings['mode'] == 'full_power' else 'full_power'
+    if call.data == "toggle_words":
+        settings['use_words'] = 'no' if settings.get('use_words') == 'yes' else 'yes'
+    elif call.data == "toggle_memes":
+        settings['memes'] = 'no' if settings.get('memes') == 'yes' else 'yes'
+    elif call.data == "toggle_nicenums":
+        settings['nice_nums'] = 'no' if settings.get('nice_nums') == 'yes' else 'yes'
+    elif call.data == "toggle_numbers":
+        settings['numbers'] = 'no' if settings.get('numbers') == 'yes' else 'yes'
+    elif call.data == "toggle_mode":
+        settings['mode'] = 'fast' if settings.get('mode') == 'full_power' else 'full_power'
+    elif call.data == "info_colvo":
+        bot.answer_callback_query(call.id, "Используй команду /colvo Мин, Макс для изменения (например: /colvo 5, 10)", show_alert=True)
+        return
     elif call.data == "btn_itog":
         saved = settings['itog_saved']
         if not saved:
-            bot.answer_callback_query(call.id, "Топ ники пока не найдены!", show_alert=True)
+            bot.answer_callback_query(call.id, "ИИ еще не отобрал топ ники!", show_alert=True)
         else:
             count = min(len(saved), 7)
             top_str = "\n".join([f"t.me/{n}" for n in saved[-count:]])
@@ -383,16 +488,16 @@ def callback_query(call):
         if settings['is_searching']:
             bot.answer_callback_query(call.id, "Поиск уже запущен!")
             return
-        bot.answer_callback_query(call.id, "Поиск активирован!")
+        bot.answer_callback_query(call.id, "Запуск сканирования...")
         settings['is_searching'] = True
-        status_msg = bot.send_message(chat_id, "🔎 Бот ищет крутые редкие комбинации (слово + цифры)...")
+        status_msg = bot.send_message(chat_id, "🔎 ИИ сканирует сеть Telegram и фильтрует лучшие варианты...")
         threading.Thread(target=run_search_loop, args=(chat_id, status_msg.message_id)).start()
         return
 
     save_db()
     try:
         bot.edit_message_text(
-            "🔥 **Telegram Rare Username Tracker & Generator**\n\nПараметры обновлены:",
+            "🔥 **Telegram Rare Username Dashboard & Generator**\n\nПараметры успешно обновлены:",
             chat_id=chat_id,
             message_id=call.message.message_id,
             parse_mode="Markdown",
@@ -402,68 +507,4 @@ def callback_query(call):
         pass
 
 def run_search_loop(chat_id, msg_id):
-    settings = get_user(chat_id)
-    batch_size = 25 if settings['mode'] == 'full_power' else 10
-    found_username = None
-    checked_local = 0
-    
-    def worker():
-        nonlocal found_username
-        if not settings['is_searching'] or found_username:
-            return
-        candidate = generate_telegram_username(settings)
-        if not settings['is_searching'] or found_username:
-            return
-        if candidate not in settings['checked_history']:
-            settings['checked_history'].append(candidate)
-            
-        if check_telegram_username(candidate):
-            found_username = candidate
-            if found_username not in settings['found_nicks']:
-                settings['found_nicks'].append(found_username)
-            if found_username not in settings['itog_saved']:
-                settings['itog_saved'].append(found_username)
-
-    while not found_username and settings['is_searching'] and checked_local < batch_size:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(worker) for _ in range(4)]
-            concurrent.futures.wait(futures)
-        checked_local += 4
-
-    save_db()
-    settings['is_searching'] = False
-    
-    try:
-        bot.delete_message(chat_id, msg_id)
-    except:
-        pass
-        
-    if found_username:
-        evals = evaluate_username(found_username)
-        similar_str = ", ".join([f"`@{s}`" for s in evals['similar']])
-        
-        report = (
-            f"🎉 **НАЙДЕН КРУТОЙ СВОБОДНЫЙ НИК!** 🎉\n\n"
-            f"👉 Ссылка: `t.me/{found_username}`\n\n"
-            f"📊 **Оценка бота:**\n"
-            f"✨ Красота/Слово: `{evals['beauty']}/10`\n"
-            f"🔢 Цифры: `{evals['numbers']}/10`\n"
-            f"📏 Длина ({len(found_username)} симв.): `{evals['length_score']}/10`\n\n"
-            f"🔗 **Подобные варианты:**\n{similar_str}\n\n"
-            f"*(Ник сохранен в команды `/itog` и `/allitog`)*"
-        )
-        bot.send_message(chat_id, report, parse_mode="Markdown")
-        bot.send_message(
-            chat_id,
-            "🔄 **Продолжить поиск?**",
-            reply_markup=get_markup(settings)
-        )
-    else:
-        bot.send_message(
-            chat_id,
-            "🛡 Порция сканирования завершена. Все варианты проверены и занесены в базу без повторов!",
-            reply_markup=get_markup(settings)
-        )
-
-print("Telegram Трейкер и Генератор юзернеймов запущен...")
-bot.infinity_polling()
+    settings = get_user(ch
