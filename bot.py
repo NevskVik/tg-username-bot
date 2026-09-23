@@ -71,9 +71,7 @@ def check_telegram_username(username):
             return True
         elif response.status_code == 200:
             # Если 200, страница существует (ник занят)
-            # Проверяем текст страницы на предмет того, свободен ли аккаунт
             if "If you have Telegram, you can contact" in response.text or "open in Telegram" not in response.text:
-                # Дополнительная проверка на заброшенный/удаленный юзернейм
                 return False
     except:
         pass
@@ -132,13 +130,11 @@ def evaluate_username(username):
     # Оценка юзернейма от 1 до 10
     length = len(username)
     
-    # 1. Оценка длины (чем короче, тем круче)
     if length <= 5: len_score = 10
     elif length == 6: len_score = 8
     elif length == 7: len_score = 6
     else: len_score = 4
 
-    # 2. Оценка цифр (красивые цифры поднимают оценку)
     num_score = 5
     has_digits = any(c.isdigit() for c in username)
     if has_digits:
@@ -147,9 +143,8 @@ def evaluate_username(username):
         else:
             num_score = 6
     else:
-        num_score = 8 # Чистые буквы — это круто
+        num_score = 8
 
-    # 3. Общая красота и благозвучие (наличие гласных/согласных)
     vowels = sum(1 for c in username if c in 'aeiou')
     beauty_score = 7 if vowels > 0 else 4
     if any(m in username for m in MEME_WORDS + COOL_ROOTS):
@@ -253,7 +248,6 @@ def callback_query(call):
     settings = get_user(chat_id)
     
     if call.data == "set_len":
-        # Циклически меняем диапазоны длин
         if settings['min_len'] == 5 and settings['max_len'] == 7:
             settings['min_len'], settings['max_len'] = 5, 10
         elif settings['min_len'] == 5 and settings['max_len'] == 10:
@@ -298,7 +292,6 @@ def callback_query(call):
 
 def run_search_loop(chat_id, msg_id):
     settings = get_user(chat_id)
-    # Выбор порции в зависимости от режима (полная сила или быстрый)
     batch_size = 25 if settings['mode'] == 'full_power' else 10
     
     found_username = None
