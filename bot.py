@@ -10,7 +10,7 @@ import telebot
 from telebot import types
 import requests
 
-TOKEN = '123456:ABC-DEF'
+TOKEN = 'API.GG'
 bot = telebot.TeleBot(TOKEN)
 
 DB_FILE = "telegram_tracker_db.json"
