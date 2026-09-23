@@ -10,7 +10,12 @@ import telebot
 from telebot import types
 import requests
 
-TOKEN = 'API.GG'
+# Безопасное получение токена из переменных окружения
+TOKEN = os.getenv('BOT_TOKEN')
+
+if not TOKEN:
+    raise ValueError("Не найден токен бота! Проверь переменную окружения BOT_TOKEN на Render.")
+
 bot = telebot.TeleBot(TOKEN)
 
 DB_FILE = "telegram_tracker_db.json"
