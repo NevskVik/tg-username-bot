@@ -10,7 +10,7 @@ import telebot
 from telebot import types
 import requests
 
-TOKEN = '8856347472:AAGv5RE33LIPLvalZPQPdwK6VYku1GDqhTk'
+TOKEN = '123456:ABC-DEF'
 bot = telebot.TeleBot(TOKEN)
 
 DB_FILE = "telegram_tracker_db.json"
